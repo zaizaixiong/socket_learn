@@ -59,7 +59,7 @@ int main(int argc,char **argv){
 				printf("we read file at the end!\n");
 				readend=1;
 				printf("we close sockfd!\n");
-				close(sockfd);//我们在服务器中每次接收到数据之后都要等1秒钟才进行回射，用以模拟网络速度server和client之间的传输时延。当我们读到文件结尾之时，关闭了sockfd，服务器在回射最后一个字节时，由于client端已经关闭了套接字，因此无法正确接收最后的数据
+				shutdown(sockfd,SHUT_WR);
 			}else if(nread>0){
 				int nwrite=write(sockfd,buff,nread);
 				printf("buff[0] is %c\n",buff[0]);
@@ -72,6 +72,7 @@ int main(int argc,char **argv){
 			if(nread==0){
 				printf("read all strecho bytes!\n");
 				close(sockfd);
+				return 0;
 			}else if(nread>0){
 				write(writefd,buff,nread);
 			}else{
@@ -80,7 +81,7 @@ int main(int argc,char **argv){
 			}
 		}
 
-		sleep(1);//如果client不是每发一个字节就sleep 1秒，则最后的文件会丢失最后1秒内发送的所有数据；如果每次发送一个字节就sleep 1秒，则会只丢失一个字节。此外，是否丢失这一个字节的数据也和我们selet之后判断的顺序有关系：比如我们的文件只有一个字节a，那么client发送a之后sleep 1秒，而server端在接收到a之后也sleep 1秒，然后再进行回射。因为我们是在同一台机器上测试，则在我们进行select的判断时，0和sockfd几乎是同时满足的，此时如果我们先判断sockfd，则我们可以读取这个字节a，那么最后的文件就没有丢失这个字节；而我们实际上是先判断0，即先判断文件是不是到结尾，此时由于文件已经到结尾，我们将关闭sockfd，而之后由于我们已经关闭了sockfd，导致我们下面对sockfd的read失效（因为此时sockfd已经是错误的文件描述符了）。且由于select对于无效的文件描述符的读监控，一直都会返回可读，即虽然sockfd已经失效了，但是此时我们还在对他进行监控，这就导致select一直返回sockfd可读，从而不停的对sockfd进行read操作，陷入了死循环之中。目前的解决方法是发现错误后直接退出程序。
+		sleep(1);
 	}
 	return 0;
 }
