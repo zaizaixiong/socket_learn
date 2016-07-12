@@ -46,7 +46,7 @@ int main(int argc,char **argv){
 		}else{
 			FD_CLR(0,&readset);
 		}
-		//FD_SET(sockfd,&readset);
+		FD_SET(sockfd,&readset);
 
 		select(sockfd+1,&readset,NULL,NULL,NULL);
 
@@ -74,13 +74,13 @@ int main(int argc,char **argv){
 				close(sockfd);
 			}else if(nread>0){
 				write(writefd,buff,nread);
-				FD_SET(sockfd,&readset);
 			}else{
 				perror("read error");
+				exit(-1);
 			}
 		}
 
-		sleep(1);//如果client不是每发一个字节就sleep 1秒，则最后的文件会丢失最后1秒内发送的所有数据；如果每次发送一个字节就sleep 1秒，则会只丢失一个字节。此外，是否丢失这一个字节的数据也和我们selet之后判断的顺序有关系：比如我们的文件只有一个字节a，那么client发送a之后sleep 1秒，而server端在接收到a之后也sleep 1秒，然后再进行回射。因为我们是在同一台机器上测试，则在我们进行select的判断时，0和sockfd几乎是同时满足的，此时如果我们先判断sockfd，则我们可以读取这个字节a，那么最后的文件就没有丢失这个字节；而我们实际上是先判断0，即先判断文件是不是到结尾，此时由于文件已经到结尾，我们将关闭sockfd，而之后由于我们已经关闭了sockfd，导致我们下面对sockfd的read失效（因为此时sockfd已经是错误的文件描述符了）。且由于select对于无效的文件描述符的读监控，一直都会返回可读，即虽然sockfd已经失效了，但是此时我们还在对他进行监控，这就导致select一直返回sockfd可读，从而不停的对sockfd进行read操作，陷入了死循环之中。对此的解决方法就是对49行的FD_SET进行注释，将它的位置改为放在77行。这样死循环的BUG解决，但是还留有数据回射不完全的BUG，下一个版本进行解决。
+		sleep(1);//如果client不是每发一个字节就sleep 1秒，则最后的文件会丢失最后1秒内发送的所有数据；如果每次发送一个字节就sleep 1秒，则会只丢失一个字节。此外，是否丢失这一个字节的数据也和我们selet之后判断的顺序有关系：比如我们的文件只有一个字节a，那么client发送a之后sleep 1秒，而server端在接收到a之后也sleep 1秒，然后再进行回射。因为我们是在同一台机器上测试，则在我们进行select的判断时，0和sockfd几乎是同时满足的，此时如果我们先判断sockfd，则我们可以读取这个字节a，那么最后的文件就没有丢失这个字节；而我们实际上是先判断0，即先判断文件是不是到结尾，此时由于文件已经到结尾，我们将关闭sockfd，而之后由于我们已经关闭了sockfd，导致我们下面对sockfd的read失效（因为此时sockfd已经是错误的文件描述符了）。且由于select对于无效的文件描述符的读监控，一直都会返回可读，即虽然sockfd已经失效了，但是此时我们还在对他进行监控，这就导致select一直返回sockfd可读，从而不停的对sockfd进行read操作，陷入了死循环之中。目前的解决方法是发现错误后直接退出程序。
 	}
 	return 0;
 }
