@@ -75,9 +75,8 @@ int main(){
 					}
 					return -1;
 				}else{
+					sleep(1);//模拟网络速度server和client之间的传输时延
 					printf("%d read %d bytes!\n",connfd,n);
-					printf("sleep one seconds!\n");
-					sleep(1);
 					write(connfd,buff,n);
 				}
 			}
