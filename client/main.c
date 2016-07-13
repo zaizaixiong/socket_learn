@@ -50,11 +50,8 @@ int main(int argc,char **argv){
 
 		select(sockfd+1,&readset,NULL,NULL,NULL);
 
-		if(FD_ISSET(8,&readset)){
-			printf("8 is readable!\n");
-		}
 		if(FD_ISSET(0,&readset)){
-			int nread=read(0,buff,1);
+			int nread=read(0,buff,MAXLINE);
 			if(nread==0){
 				printf("we read file at the end!\n");
 				readend=1;
@@ -62,7 +59,6 @@ int main(int argc,char **argv){
 				shutdown(sockfd,SHUT_WR);
 			}else if(nread>0){
 				int nwrite=write(sockfd,buff,nread);
-				printf("buff[0] is %c\n",buff[0]);
 			}
 		}
 
@@ -81,7 +77,6 @@ int main(int argc,char **argv){
 			}
 		}
 
-		sleep(1);
 	}
 	return 0;
 }
