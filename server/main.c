@@ -1,20 +1,21 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
+#include<poll.h>
 #include<sys/socket.h>
-#include<sys/select.h>
 #include<netinet/in.h>
 #include<errno.h>
 #include<signal.h>
 
 #define MAXLINE 1024
+#define MAX_OPEN 1024
 int main(){
 	int listenfd,connfd;
 	struct sockaddr_in servaddr;
 	char buff[MAXLINE+1];
 	int i=0,maxfd;
 	int flag[100]={0};//用于标识对应的文件描述符是否需要监控
-	fd_set readset;
+	struct pollfd client[MAX_OPEN];
 
 	if((listenfd=socket(AF_INET,SOCK_STREAM,0))==-1){
 		printf("socket error!\n");
@@ -27,7 +28,6 @@ int main(){
 		printf("inet_pton error\n");
                 exit(1);
 	}
-	printf("listenfd=%d\n",listenfd);
 
 	int so_reuseaddr = 1;
         setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &so_reuseaddr,sizeof(so_reuseaddr));
@@ -38,60 +38,54 @@ int main(){
 
 	listen(listenfd,1);
 
-	flag[listenfd]=1;
-	maxfd=listenfd;
+	for(i=0;i<MAX_OPEN;i++){
+		client[i].fd=-1;
+	}
 
-	FD_ZERO(&readset);
+	client[0].fd=listenfd;
+	client[0].events=POLLRDNORM;
 
 	while(1){
-		for(i=0;i<=maxfd;i++){
-			if(flag[i]){
-				FD_SET(i,&readset);
+
+		poll(client,MAX_OPEN,-1);
+
+		if(client[0].revents & POLLRDNORM){
+			connfd=accept(listenfd,(struct sockaddr*)NULL,NULL);
+			if(connfd>0){
+				printf("there is new connection %d\n",connfd);
+				client[connfd].fd=connfd;
+				client[connfd].events=POLLRDNORM;
+			}else if(connfd<0 && errno!=EINTR){
+				perror("accept connect error");
+				return -1;
 			}
 		}
 
-		select(maxfd+1,&readset,NULL,NULL,NULL);
-
-		for(i=0;i<=maxfd;i++){
-			if(FD_ISSET(i,&readset)){
+		for(i=1;i<MAX_OPEN;i++){
+			if(client[i].revents & (POLLRDNORM | POLLERR)){
 				printf("i=%d\n",i);
-				if(i==listenfd){
-					connfd=accept(listenfd,(struct sockaddr*)NULL,NULL);
-					if(connfd>0){
-						printf("there is new connection %d\n",connfd);
-						flag[connfd]=1;
-						maxfd=maxfd>connfd?maxfd:connfd;
-					}else if(connfd<0 && errno!=EINTR){
-						perror("accept connect error");
-						return -1;
+				bzero(buff,MAXLINE);
+				int nread=read(i,buff,MAXLINE);
+				if(nread>0){
+					printf("we read something from %d:%s",i,buff);
+					int nwrite=write(i,buff,nread);
+					if(nwrite==nread){
+						printf("we echo it!\n\n");
+					}else{
+						printf("we echo error!\n\n");
 					}
-				}else{
-					bzero(buff,MAXLINE);
-					int nread=read(i,buff,MAXLINE);
-					if(nread>0){
-						printf("we read something from %d:%s",i,buff);
-						int nwrite=write(i,buff,nread);
-						if(nwrite==nread){
-							printf("we echo it!\n\n");
-						}
-					}else if(nread==0){
-						flag[i]=0;
-						/*
-						 * 此处的FD_CLR非常重要，如果没有CLR，则下次select的时候i的socket关闭却依然会显示是可读的，会期待i的
-						 * 输入，此时会导致程序阻塞。
- 						*/
-						FD_CLR(i,&readset);
+				}else if(nread==0){
+					client[i].fd=-1;
+					close(i);
+					printf("connection %d closed!\n",i);
+				}else if(nread<0){
+					if(errno==EINTR){
+						continue;
+					}else{
+						printf("we have error while reading connected %d",i);
+						perror("");
+						client[i].fd=-1;
 						close(i);
-						printf("connection %d closed!\n",i);
-					}else if(nread<0){
-						if(errno==EINTR){
-							continue;
-						}else{
-							printf("we have error while reading connected %d",i);
-							perror("");
-							FD_CLR(i,&readset);
-							close(i);
-						}
 					}
 				}
 			}

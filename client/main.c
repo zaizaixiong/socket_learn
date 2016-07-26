@@ -14,7 +14,6 @@ int main(int argc,char **argv){
 	struct sockaddr_in servaddr;
 	char buff[MAXLINE+1];
 	fd_set readset;
-	int writefd;
 	int readend=0;
 
 	if((sockfd=socket(AF_INET,SOCK_STREAM,0))==-1){
@@ -34,8 +33,6 @@ int main(int argc,char **argv){
 		printf("connect error!\n");
 		return -1;
 	}
-
-	writefd=open("write",O_CREAT | O_WRONLY );
 
 	FD_ZERO(&readset);
 
@@ -70,7 +67,9 @@ int main(int argc,char **argv){
 				close(sockfd);
 				return 0;
 			}else if(nread>0){
-				write(writefd,buff,nread);
+				printf("read echo:\n");
+				write(1,buff,nread);
+				printf("\n");
 			}else{
 				perror("read error");
 				exit(-1);
