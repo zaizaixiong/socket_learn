@@ -89,6 +89,7 @@ int main(){
 						}else{
 							printf("we have error while reading connected %d",i);
 							perror("");
+							FD_CLR(i,&readset);
 							close(i);
 						}
 					}
